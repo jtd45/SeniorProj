@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
-import imutils
+import sys
+import serial
 
 class Rect(object):
 	def __init__(self,x,y,x2,y2):
@@ -77,26 +78,63 @@ def diffFilter(f0,f1,f2):
 	d2=cv2.absdiff(f1,f0)
 	return cv2.bitwise_and(d1,d2)
 
+class arduinoSerial(object):
+	def __init__(self):
+		ports=['COM%s' % (i+1) for i in range(256)]
+		for port in ports:
+			try:
+				self.port = serial.Serial(port,9600,timeout=0)
+				print("connected to com"+port)
+				break
+			except (OSError,serial.SerialException):
+				pass
+				self.port=None
+				print("No device connected")
+	def write_Serial(self,string):
+		print(string)
+		self.port.write(string.encode("Ascii"))
+	def read_Serial(self):
+		lineIn=""
+		try:
+			lineIn=self.port.readline()
+			if lineIn:
+				try:
+					return lineIn.decode("utf-8")
+				except UnicodeDecodeError:
+					print("\ncan't read input\n")
+					return ""
+		except self.port.SerialException:
+			print("data could not be read")
+			return ""
+
 if __name__=='__main__':
 	try:
 		#boundries=[((0,100,220), (5,120,255)),((150,230,230),(180,245,255)),((165,210,115),(180,225,130)),((0,241,227),(2,254,235)),((175,110,250),(178,137,254))]
 		boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255))]
-		video=cv2.VideoCapture(0)
+		video=cv2.VideoCapture(1)
 		if video.isOpened()==False:
 			video.open();
 		points=[]
 		lostCount=0
 		count=0
 		redobjects=list()
+		port=arduinoSerial()
 		
-		while(1):
+		fourcc = cv2.VideoWriter_fourcc(*'XVID')
+		out = cv2.VideoWriter('output.avi',fourcc, 20.0, (832,624))
+		
+		_,image=video.read()
+		cv2.imshow("title",image)
+		
+		while(video.isOpened()):
 			_,image=video.read()
+			image=cv2.resize(image,(832,624))#,fx=2,fy=2)
 			#image = imutils.resize(image, width=1300)
 			hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
 			mask=0
 			for (lower,upper) in boundries:
 				mask=cv2.bitwise_or(cv2.inRange(hsv,lower,upper),mask)
-			mask=cv2.dilate(mask,None,iterations=20)
+			mask=cv2.dilate(mask,None,iterations=10)
 			cnts=cv2.findContours(mask.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
 			#print(len(cnts))
 			cv2.drawContours(image, cnts, -1, (0,255,0), 1)
@@ -155,11 +193,17 @@ if __name__=='__main__':
 				thickness = 3
 				#cv2.line(image, points[i - 1], points[i], (0, 255, 0), thickness)
 			
-			cv2.imshow("title",image)
 			k=cv2.waitKey(10)&0xFF
 			if k==27:
 				break
+			if cv2.getWindowProperty("title",0)==-1:
+				break
+			cv2.imshow("title",image)
+			out.write(image)
+			
 		cv2.destroyAllWindows()
+		video.release()
+		out.release()
 	except:
 		print("can't open")
 		raise
