@@ -42,11 +42,39 @@ class RedObj(object):
 				self.lostCount=0
 				return True
 		self.lostCount+=1
-		if self.lostCount>20:
+		if self.lostCount>10:
 			return False
 	def set_velocity(self,v):
 		self.vel=v
 
+class arduinoSerial(object):
+	def __init__(self):
+		ports=['COM%s' % (i+1) for i in range(256)]
+		for port in ports:
+			try:
+				self.port = serial.Serial(port,9600,timeout=0)
+				print("connected to com"+port)
+				break
+			except (OSError,serial.SerialException):
+				pass
+				self.port=None
+				print("No device connected")
+	def write_Serial(self,string):
+		print(string)
+		self.port.write(string.encode("Ascii"))
+	def read_Serial(self):
+		lineIn=""
+		try:
+			lineIn=self.port.readline()
+			if lineIn:
+				try:
+					return lineIn.decode("utf-8")
+				except UnicodeDecodeError:
+					print("\ncan't read input\n")
+					return ""
+		except self.port.SerialException:
+			print("data could not be read")
+			return ""
 
 def colorFilter(image,lower,upper):
 	lower=np.array(lower,dtype="uint8")
@@ -78,42 +106,14 @@ def diffFilter(f0,f1,f2):
 	d2=cv2.absdiff(f1,f0)
 	return cv2.bitwise_and(d1,d2)
 
-class arduinoSerial(object):
-	def __init__(self):
-		ports=['COM%s' % (i+1) for i in range(256)]
-		for port in ports:
-			try:
-				self.port = serial.Serial(port,9600,timeout=0)
-				print("connected to com"+port)
-				break
-			except (OSError,serial.SerialException):
-				pass
-				self.port=None
-				print("No device connected")
-	def write_Serial(self,string):
-		print(string)
-		self.port.write(string.encode("Ascii"))
-	def read_Serial(self):
-		lineIn=""
-		try:
-			lineIn=self.port.readline()
-			if lineIn:
-				try:
-					return lineIn.decode("utf-8")
-				except UnicodeDecodeError:
-					print("\ncan't read input\n")
-					return ""
-		except self.port.SerialException:
-			print("data could not be read")
-			return ""
 
 if __name__=='__main__':
 	try:
 		#boundries=[((0,100,220), (5,120,255)),((150,230,230),(180,245,255)),((165,210,115),(180,225,130)),((0,241,227),(2,254,235)),((175,110,250),(178,137,254))]
 		boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255))]
-		video=cv2.VideoCapture(1)
+		video=cv2.VideoCapture(0)
 		if video.isOpened()==False:
-			video.open();
+			video.open()
 		points=[]
 		lostCount=0
 		count=0
@@ -134,7 +134,7 @@ if __name__=='__main__':
 			mask=0
 			for (lower,upper) in boundries:
 				mask=cv2.bitwise_or(cv2.inRange(hsv,lower,upper),mask)
-			mask=cv2.dilate(mask,None,iterations=10)
+			mask=cv2.dilate(mask,None,iterations=20)
 			cnts=cv2.findContours(mask.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
 			#print(len(cnts))
 			cv2.drawContours(image, cnts, -1, (0,255,0), 1)
@@ -152,16 +152,13 @@ if __name__=='__main__':
 					center=(x-10,y+10)
 					cv2.putText(image,str(robject.id),center,cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 					cv2.circle(image,(x,y),50,(0,255,0),3)
-				print(len(rects)," ",len(cnts))
+				#print(len(rects)," ",len(cnts))
+
 				for rect in rects:
 					redobjects.append(RedObj(rect,count))
 					cv2.rectangle(image,(rect.x1,rect.y1),(rect.x2,rect.y2),(0,255,0),2)
-					#center=(int((rect.x1+rect.x2)/2)-10,int((rect.y1+rect.y2)/2)+10)
-					#x,y=rect.get_center()
-					#center=(x-10,y+10)
-					#cv2.putText(image,str(count),center,cv2.FONT_HERSHEY_COMPLEX,1,(0,255,0))
-					#cv2.circle(image,center,10,(0,255,0),3)
 					count+=1
+
 				c=max(cnts,key=cv2.contourArea)
 				((x, y), radius) = cv2.minEnclosingCircle(c)
 				#Identify center of frisbee
@@ -174,7 +171,10 @@ if __name__=='__main__':
 				if len(points)>0:
 					cv2.circle(image,points[len(points)-1],10,(0,255,0),3)
 				lostCount+=1
+				rects=list()
 				for robject in redobjects:
+					if robject.continuity(rects)==False:
+						redobjects.remove(robject)
 					cv2.rectangle(image,(robject.rect.x1,robject.rect.y1),(robject.rect.x2,robject.rect.y2),(0,255,0),2)
 					#center=(int((rect.x1+rect.x2)/2)-10,int((rect.y1+rect.y2)/2)+10)
 					x,y=robject.rect.get_center()
@@ -193,6 +193,29 @@ if __name__=='__main__':
 				thickness = 3
 				#cv2.line(image, points[i - 1], points[i], (0, 255, 0), thickness)
 			
+			area=0
+			largest=RedObj(Rect(-1,-1,-1,-1),-1)
+			for robject in redobjects:
+				if robject.rect.get_area()>area:
+					area=robject.rect.get_area()
+					largest=robject
+			
+			x,y=largest.rect.get_center()
+			dirx=0
+			diry=0
+			if x>0 and y>0:
+				if x>516:
+					dirx=1 #move right
+				elif x<316:
+					dirx=-1 #move left
+				if y>412:
+					diry=1 #move right
+				elif y<312:
+					diry=-1 #move left
+			if port.port!=None:
+				port.write_Serial(dirx,diry)
+			print(dirx,diry)
+			cv2.putText(image,str(dirx)+" "+str(diry),(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 			k=cv2.waitKey(10)&0xFF
 			if k==27:
 				break
