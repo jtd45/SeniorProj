@@ -13,6 +13,10 @@ class Rect(object):
 		return int((self.x1+self.x2)/2),int((self.y1+self.y2)/2)
 	def get_area(self):
 		return abs(self.x1-self.x2)*abs(self.y1-self.y2)
+	def get_width(self):
+		return abs(self.x1-self.x2)
+	def get_height(self):
+		return abs(self.y1-self.y2)
 	def merge(self,rect):
 		self.x2=max(rect.x2,self.x2)
 		self.y2=max(rect.y2,self.y2)
@@ -35,14 +39,14 @@ class RedObj(object):
 		oarea=self.rect.get_area()
 		for rect in rects:
 			x,y=rect.get_center()
-			if abs(x-ox)<50 and abs(y-oy)<50:
+			if abs(x-ox)<rect.get_width()/2 and abs(y-oy)<rect.get_height()/2:
 				self.rect.move(y-oy,x-ox)
 				self.rect.merge(rect)
 				rects.remove(rect)
 				self.lostCount=0
 				return True
 		self.lostCount+=1
-		if self.lostCount>20:
+		if self.lostCount>15:
 			return False
 	def set_velocity(self,v):
 		self.vel=v
@@ -51,17 +55,24 @@ class arduinoSerial(object):
 	def __init__(self):
 		ports=['COM%s' % (i+1) for i in range(256)]
 		for port in ports:
+			print(port)
 			try:
-				self.port = serial.Serial(port,9600,timeout=0)
+				port='COM4'
+				self.port = serial.Serial('COM4',9600,timeout=0)
 				print("connected to com"+port)
 				break
 			except (OSError,serial.SerialException):
 				pass
 				self.port=None
 				print("No device connected")
-	def write_Serial(self,string):
-		print(string)
-		self.port.write(string.encode("Ascii"))
+	def write_Serial(self,byte):
+		#print("0x%x"%byte)
+		#self.port.write('w'.encode('ascii'))
+		#s=bytearray.fromhex("99").decode()
+		
+		s=chr(int(byte,16)).encode('utf-8')
+		#byte="\x%s"+s
+		self.port.write(s)#.encode('charmap'))
 	def read_Serial(self):
 		lineIn=""
 		try:
@@ -85,7 +96,7 @@ def colorFilter(image,lower,upper):
 
 def findObjects(contours):
 	objects=list()
-	c=20
+	c=50
 	for cnt in contours:
 		x,y,w,h=cv2.boundingRect(cnt)
 		found=0
@@ -126,6 +137,7 @@ if __name__=='__main__':
 		_,image=video.read()
 		cv2.imshow("title",image)
 		
+		f=0
 		while(video.isOpened()):
 			_,image=video.read()
 			image=cv2.resize(image,(832,624))#,fx=2,fy=2)
@@ -201,21 +213,23 @@ if __name__=='__main__':
 					largest=robject
 			
 			x,y=largest.rect.get_center()
-			dirx=0
-			diry=0
+			dir="0"
 			if x>0 and y>0:
 				if x>516:
-					dirx=1 #move right
+					dir="1"#dir|0x01 #move right
 				elif x<316:
-					dirx=-1 #move left
+					dir="9"#dir|0x09 #move left
 				if y>412:
-					diry=1 #move right
+					dir="1"+dir#|0x10 #move right
 				elif y<312:
-					diry=-1 #move left
-			#if port.port!=None:
-			#	port.write_Serial(dirx,diry)
-			print(dirx,diry)
-			cv2.putText(image,str(dirx)+" "+str(diry),(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
+					dir="9"+dir#|0x90 #move left
+			if port.port!=None: #and f<20:
+				print("send")
+				print(dir)
+				port.write_Serial(dir)
+				print(port.read_Serial())
+			#print("0x%x"%dir)
+			cv2.putText(image,dir,(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 			k=cv2.waitKey(10)&0xFF
 			if k==27:
 				break
