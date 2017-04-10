@@ -42,7 +42,7 @@ class RedObj(object):
 				self.lostCount=0
 				return True
 		self.lostCount+=1
-		if self.lostCount>10:
+		if self.lostCount>20:
 			return False
 	def set_velocity(self,v):
 		self.vel=v
@@ -110,8 +110,8 @@ def diffFilter(f0,f1,f2):
 if __name__=='__main__':
 	try:
 		#boundries=[((0,100,220), (5,120,255)),((150,230,230),(180,245,255)),((165,210,115),(180,225,130)),((0,241,227),(2,254,235)),((175,110,250),(178,137,254))]
-		boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255))]
-		video=cv2.VideoCapture(0)
+		boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]
+		video=cv2.VideoCapture(1)
 		if video.isOpened()==False:
 			video.open()
 		points=[]
@@ -212,8 +212,8 @@ if __name__=='__main__':
 					diry=1 #move right
 				elif y<312:
 					diry=-1 #move left
-			if port.port!=None:
-				port.write_Serial(dirx,diry)
+			#if port.port!=None:
+			#	port.write_Serial(dirx,diry)
 			print(dirx,diry)
 			cv2.putText(image,str(dirx)+" "+str(diry),(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 			k=cv2.waitKey(10)&0xFF
