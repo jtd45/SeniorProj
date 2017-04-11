@@ -1,18 +1,22 @@
+import serial
+
 class arduinoSerial(object):
 	def __init__(self):
 		ports=['COM%s' % (i+1) for i in range(256)]
 		for port in ports:
+			print(port)
 			try:
-				self.port = serial.Serial(port,9600,timeout=0)
+				port='COM4'
+				self.port = serial.Serial('COM4',9600,timeout=0)
 				print("connected to com"+port)
 				break
 			except (OSError,serial.SerialException):
 				pass
 				self.port=None
 				print("No device connected")
-	def write_Serial(self,string):
-		print(string)
-		self.port.write(string.encode("Ascii"))
+	def write_Serial(self,byte):
+		s=chr(int(byte,16)).encode('utf-8')
+		self.port.write(s)
 	def read_Serial(self):
 		lineIn=""
 		try:
