@@ -9,7 +9,7 @@ from redObjects import RedObj
 
 def findObjects(contours):
 	objects=list()
-	c=50
+	c=10
 	for cnt in contours:
 		x,y,w,h=cv2.boundingRect(cnt)
 		found=0
@@ -25,13 +25,13 @@ def findObjects(contours):
 	return objects
 
 def image_filter(image):
-	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]#,((10,15,250),(15,25,255))]
+	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110)),((0,90,220),(10,110,235))]
 	image=cv2.resize(image,(832,624))
 	hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
 	mask=0
 	for (lower,upper) in boundries:
 		mask=cv2.bitwise_or(cv2.inRange(hsv,lower,upper),mask)
-	mask=cv2.dilate(mask,None,iterations=20)
+	mask=cv2.dilate(mask,None,iterations=15)
 	cnts=cv2.findContours(mask.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
 	nmask=cv2.bitwise_not(mask)
 	mimg=cv2.bitwise_and(image,image,mask=mask)
@@ -45,33 +45,39 @@ def disp_objects(image,robject):
 	cv2.putText(image,str(robject.id)+" "+str(robject.frisbee),center,cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 	cv2.circle(image,(x,y),int(robject.rect.get_width()/2),(0,255,0),3)
 
-def get_frisbee(image,redobjects,rects):
-	area=0
-	frisbee=RedObj(Rect(-1,-1,-1,-1),-1)
+def find_overlap(redobjects,rects):
 	for robject in redobjects:
 		if robject.continuity(rects)==False:
 			redobjects.remove(robject)
-		if robject.frisbee==True:
-			disp_objects(image,robject)
-		if robject.rect.get_area()>area:
-			area=robject.rect.get_area()
+
+def get_frisbee(image,redobjects):
+	area=0
+	relative_motion=20
+	frisbee=RedObj(Rect(-1,-1,-1,-1),-1)
+	for robject in redobjects:
+		disp_objects(image,robject)
+		if (robject.age-robject.motion<relative_motion and robject.age>20) and robject.found==True:#robject.rect.get_area()>area and robject.found==True:
+			relative_motion=robject.age-robject.motion
 			frisbee=robject
 	return frisbee
+	
+def check_frisbee(frisbee):
+	if frisbee.motion+20<frisbee.age:
+		frisbee.frisbee=-1
+		return False
 
-def sendto_serial(x,y,image):
+def find_loc(x,y,image):
 	dir="0"
 	if x>0 and y>0:
 		if x>516:
-			dir="1"#dir|0x01 #move right
+			dir="1"#move right
 		elif x<316:
-			dir="9"#dir|0x09 #move left
+			dir="9"#move left
 		if y>412:
-			dir="1"+dir#|0x10 #move right
+			dir="1"+dir#move right
 		elif y<312:
-			dir="9"+dir#|0x90 #move left
-	if port.port!=None: #and f<20:
-		port.write_Serial(dir)
-	cv2.putText(image,dir,(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
+			dir="9"+dir#move left
+	return dir
 
 if __name__=='__main__':
 	try:
@@ -79,6 +85,7 @@ if __name__=='__main__':
 		if video.isOpened()==False:
 			video.open()
 		count=0
+
 		redobjects=list()
 		port=arduinoSerial()
 		
@@ -88,28 +95,48 @@ if __name__=='__main__':
 		_,image=video.read()
 		cv2.imshow("title",image)
 		
-		f=0
+		frisbee=RedObj(Rect(-1,-1,-1,-1),-1)
+		prevdir="0"
+		dirCount=0
+		
 		while(video.isOpened()):
 			_,image=video.read()
 			cnts,image=image_filter(image)
 			area=0
+			rects=list()
 			if len(cnts)>0:
 				rects=findObjects(cnts)
-				frisbee=get_frisbee(image,redobjects,rects)
+				
+				for rect in rects:
+					cv2.rectangle(image,(rect.x1,rect.y1),(rect.x2,rect.y2),(0,255,0),2)
+			
+			find_overlap(redobjects,rects)
+			if check_frisbee(frisbee)==False or frisbee.found==False:
 				for rect in rects:
 					redobjects.append(RedObj(rect,count))
-					cv2.rectangle(image,(rect.x1,rect.y1),(rect.x2,rect.y2),(0,255,0),2)
 					count+=1
+				frisbee=get_frisbee(image,redobjects)
+				#redobjects.remove(frisbee)
+				frisbee.frisbee=1
+				disp_objects(image,frisbee)
 			else:
-				frisbee=get_frisbee(image,redobjects,list())
+				#frisbee.continuity(rects)
+				disp_objects(image,frisbee)
+				check_frisbee(frisbee)
 
-			print(frisbee.age)
-			if frisbee.age>3:
-				for robject in redobjects:
-					robject.frisbee=False
-				frisbee.frisbee=True
 			x,y=frisbee.rect.get_center()
-			sendto_serial(x,y,image)
+			dir="0"
+			if(frisbee.found==True):
+				dir=find_loc(x,y,image)
+				prevdir=dir
+				dirCount=0
+			else:
+				if dirCount<5:
+					dir=prevdir
+					dirCount+=1
+			if port.port!=None:
+				port.write_Serial(dir)
+			cv2.putText(image,dir,(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 
 			k=cv2.waitKey(10)&0xFF
 			if k==27:
