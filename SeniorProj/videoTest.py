@@ -25,13 +25,13 @@ def findObjects(contours):
 	return objects
 
 def image_filter(image):
-	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110)),((0,90,220),(10,110,235))]
+	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]#,((0,90,220),(10,110,235))]
 	image=cv2.resize(image,(832,624))
 	hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
 	mask=0
 	for (lower,upper) in boundries:
 		mask=cv2.bitwise_or(cv2.inRange(hsv,lower,upper),mask)
-	mask=cv2.dilate(mask,None,iterations=15)
+	mask=cv2.dilate(mask,None,iterations=30)
 	cnts=cv2.findContours(mask.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
 	nmask=cv2.bitwise_not(mask)
 	mimg=cv2.bitwise_and(image,image,mask=mask)
@@ -60,31 +60,38 @@ def get_frisbee(image,redobjects):
 			relative_motion=robject.age-robject.motion
 			frisbee=robject
 	return frisbee
-	
+
+fcount=0
 def check_frisbee(frisbee):
-	if frisbee.motion+20<frisbee.age:
+	global fcount
+	fcount+=1
+	if frisbee.motion+20<frisbee.age and frisbee.frisbee!=2 and frisbee.frisbee==1:
 		frisbee.frisbee=-1
+		fcount=0
 		return False
+	if fcount>20:
+		frisbee.frisbee=2
 
 def find_loc(x,y,image):
 	dir="0"
 	if x>0 and y>0:
-		if x>516:
-			dir="1"#move right
-		elif x<316:
-			dir="9"#move left
-		if y>412:
-			dir="1"+dir#move right
-		elif y<312:
-			dir="9"+dir#move left
+		if y>332:
+			dir="9"#move right
+		elif y<292:
+			dir="1"#move left
+		if x>446:
+			dir="9"+dir#move right
+		elif x<386:
+			dir="1"+dir#move left
 	return dir
 
 if __name__=='__main__':
 	try:
-		video=cv2.VideoCapture(0)
+		video=cv2.VideoCapture(1)
 		if video.isOpened()==False:
 			video.open()
 		count=0
+		counter=0
 
 		redobjects=list()
 		port=arduinoSerial()
@@ -96,7 +103,7 @@ if __name__=='__main__':
 		cv2.imshow("title",image)
 		
 		frisbee=RedObj(Rect(-1,-1,-1,-1),-1)
-		prevdir="0"
+		prevdir=""
 		dirCount=0
 		
 		while(video.isOpened()):
@@ -111,13 +118,14 @@ if __name__=='__main__':
 					cv2.rectangle(image,(rect.x1,rect.y1),(rect.x2,rect.y2),(0,255,0),2)
 			
 			find_overlap(redobjects,rects)
-			if check_frisbee(frisbee)==False or frisbee.found==False:
+			if frisbee.found==False or frisbee.frisbee==-1:
 				for rect in rects:
 					redobjects.append(RedObj(rect,count))
 					count+=1
 				frisbee=get_frisbee(image,redobjects)
 				#redobjects.remove(frisbee)
-				frisbee.frisbee=1
+				if frisbee.frisbee!=-1:
+					frisbee.frisbee=1
 				disp_objects(image,frisbee)
 			else:
 				#frisbee.continuity(rects)
@@ -125,17 +133,27 @@ if __name__=='__main__':
 				check_frisbee(frisbee)
 
 			x,y=frisbee.rect.get_center()
-			dir="0"
+			dir=""
+			
+			if counter>0 and dir!=prevdir:
+				counter+=1
+				if counter>=3:
+					counter=0
+			else:
+				counter=0
 			if(frisbee.found==True):
 				dir=find_loc(x,y,image)
 				prevdir=dir
 				dirCount=0
 			else:
-				if dirCount<5:
+				if dirCount<0:
+					counter=0
 					dir=prevdir
 					dirCount+=1
-			if port.port!=None:
+			
+			if port.port!=None and counter==0 and frisbee.found==True:
 				port.write_Serial(dir)
+				counter+=1
 			cv2.putText(image,dir,(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 
 			k=cv2.waitKey(10)&0xFF
@@ -146,6 +164,8 @@ if __name__=='__main__':
 			cv2.imshow("title",image)
 			out.write(image)
 			
+		if port.port!=None:
+				port.write_Serial("0")
 		cv2.destroyAllWindows()
 		video.release()
 		out.release()

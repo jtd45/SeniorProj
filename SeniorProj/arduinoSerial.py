@@ -15,7 +15,10 @@ class arduinoSerial(object):
 				self.port=None
 				print("No device connected")
 	def write_Serial(self,byte):
-		s=chr(int(byte,16)).encode('utf-8')
+		if byte!="":
+			s=chr(int(byte,16)).encode('utf-8')
+		else:
+			s="".encode('utf-8')
 		self.port.write(s)
 	def read_Serial(self):
 		lineIn=""
