@@ -27,16 +27,31 @@ def findObjects(contours):
 def image_filter(image):
 	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]#,((0,90,220),(10,110,235))]
 	image=cv2.resize(image,(832,624))
+	#image filtering
+	image=cv2.bilateralFilter(image,9,75,75)
 	hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
 	mask=0
 	for (lower,upper) in boundries:
 		mask=cv2.bitwise_or(cv2.inRange(hsv,lower,upper),mask)
-	mask=cv2.dilate(mask,None,iterations=30)
+	mask=cv2.dilate(mask,None,iterations=20)
 	cnts=cv2.findContours(mask.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
 	nmask=cv2.bitwise_not(mask)
 	mimg=cv2.bitwise_and(image,image,mask=mask)
-	cv2.drawContours(image, cnts, -1, (0,255,0), 1)
 	return cnts,image
+
+def get_roi_hist(image,rect):
+	roi=image[rect.x1-20:rect.get_width()+40,rect.y1-20:rect.get_width()+40]
+	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]
+	image=cv2.resize(image,(832,624))
+	hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
+	mask=0
+	for (lower,upper) in boundries:
+		mask=cv2.bitwise_or(cv2.inRange(hsv,lower,upper),mask)
+	
+	roi_hist = cv2.calcHist([hsv], [0], mask, [180], [0, 180])
+	cv2.normalize(roi_hist, roi_hist, 0, 255, cv2.NORM_MINMAX)
+	term_crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 80, 1)
+	return roi_hist,term_crit
 
 def disp_objects(image,robject):
 	cv2.rectangle(image,(robject.rect.x1,robject.rect.y1),(robject.rect.x2,robject.rect.y2),(0,255,0),2)
@@ -69,7 +84,7 @@ def check_frisbee(frisbee):
 		frisbee.frisbee=-1
 		fcount=0
 		return False
-	if fcount>20:
+	if fcount>1:
 		frisbee.frisbee=2
 
 def find_loc(x,y,image):
@@ -85,9 +100,14 @@ def find_loc(x,y,image):
 			dir="1"+dir#move left
 	return dir
 
+def diffFilter(f0,f1,f2):
+	d1=cv2.bitwise_or(f2,f1)
+	d2=cv2.bitwise_or(f1,f0)
+	return cv2.bitwise_or(d1,d2)
+
 if __name__=='__main__':
 	try:
-		video=cv2.VideoCapture(1)
+		video=cv2.VideoCapture(0)
 		if video.isOpened()==False:
 			video.open()
 		count=0
@@ -100,18 +120,27 @@ if __name__=='__main__':
 		out = cv2.VideoWriter('output.avi',fourcc, 20.0, (832,624))
 		
 		_,image=video.read()
+		#image=diffFilter(image0,image1,image2)
 		cv2.imshow("title",image)
 		
 		frisbee=RedObj(Rect(-1,-1,-1,-1),-1)
 		prevdir=""
 		dirCount=0
 		
+		pantilt=[90,90]
+		state=0
+		
+		track_window=Rect(-1,-1,-1,-1)
 		while(video.isOpened()):
-			_,image=video.read()
+			_,imageo=video.read()
+			image=imageo
+			
+			#image=diffFilter(image0,image1,image2)
 			cnts,image=image_filter(image)
 			area=0
 			rects=list()
 			if len(cnts)>0:
+				cv2.drawContours(image, cnts, -1, (0,255,0), 1)
 				rects=findObjects(cnts)
 				
 				for rect in rects:
@@ -119,6 +148,8 @@ if __name__=='__main__':
 			
 			find_overlap(redobjects,rects)
 			if frisbee.found==False or frisbee.frisbee==-1:
+				state=0
+				track_window=Rect(-1,-1,-1,-1)
 				for rect in rects:
 					redobjects.append(RedObj(rect,count))
 					count+=1
@@ -128,11 +159,22 @@ if __name__=='__main__':
 					frisbee.frisbee=1
 				disp_objects(image,frisbee)
 			else:
+				if state==0:
+					roi_hist,term_crit=get_roi_hist(imageo,frisbee.rect)
+					track_window=frisbee.rect
+					state=1
+				hsv = cv2.cvtColor(imageo, cv2.COLOR_BGR2HSV)
+				dst = cv2.calcBackProject([hsv], [0], roi_hist, [0,180], 1)
+				x,y,w,h=track_window.get_points()
+				tw=(x,y,w,h)
+				ret, tw = cv2.meanShift(dst, tw, term_crit)
+				x,y,w,h=tw
+				track_window=Rect(x-20,y-20,x+w+20,y+h+20)
+				cv2.rectangle(image,(x,y),(x+w,y+h),255,5)
 				#frisbee.continuity(rects)
 				disp_objects(image,frisbee)
 				check_frisbee(frisbee)
 
-			x,y=frisbee.rect.get_center()
 			dir=""
 			
 			if counter>0 and dir!=prevdir:
@@ -142,6 +184,7 @@ if __name__=='__main__':
 			else:
 				counter=0
 			if(frisbee.found==True):
+				x,y=track_window.get_center()
 				dir=find_loc(x,y,image)
 				prevdir=dir
 				dirCount=0
@@ -150,6 +193,12 @@ if __name__=='__main__':
 					counter=0
 					dir=prevdir
 					dirCount+=1
+			
+			serialString=port.read_Serial()
+			if serialString!=None:
+				i=serialString.find("tilt")
+				if i>0:
+					print("tilt",serialString[i:16])
 			
 			if port.port!=None and counter==0 and frisbee.found==True:
 				port.write_Serial(dir)
