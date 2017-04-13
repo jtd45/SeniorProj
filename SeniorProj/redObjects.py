@@ -12,6 +12,8 @@ class Rect(object):
 		return abs(self.x1-self.x2)
 	def get_height(self):
 		return abs(self.y1-self.y2)
+	def get_points(self):
+		return self.x1,self.y1,self.get_width(),self.get_height()
 	def merge(self,rect):
 		self.x2=max(rect.x2,self.x2)
 		self.y2=max(rect.y2,self.y2)
