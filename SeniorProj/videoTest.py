@@ -80,7 +80,7 @@ fcount=0
 def check_frisbee(frisbee):
 	global fcount
 	fcount+=1
-	if frisbee.motion+20<frisbee.age and frisbee.frisbee!=2 and frisbee.frisbee==1:
+	if frisbee.motion+20<frisbee.age and frisbee.frisbee==1:
 		frisbee.frisbee=-1
 		fcount=0
 		return False
