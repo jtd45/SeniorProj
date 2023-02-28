@@ -1,6 +1,6 @@
 **Overview:**
 
-Senior Project from Pitt, which was designing a tripod that could automatically track a Frisbee during ultimate Frisbee games
+Senior Project from Pitt, we desigend a tripod that could automatically track a Frisbee during ultimate Frisbee games
 
 My role was to program the image processing component using python and openCV to track a red Frisbee as it passed by our webcam and tell the Arduino that to move the camera. I did this by looking for red objects moving in the frame
 
