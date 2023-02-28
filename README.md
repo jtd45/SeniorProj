@@ -8,7 +8,8 @@ My role was to program the image processing component using python and openCV to
 **Steps to Run:**
 
 To run first pip install numpy, opencv.python and serial
-  Then run 'videoTest.py'
+
+Then open 'videoTest.py' in pyton and run it in the python shell
 
 
 **Explanation:**
