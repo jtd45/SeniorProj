@@ -19,7 +19,7 @@ def diffFilter4(f0,f1):
 	return d,thresh
 	
 def image_filter(image):
-	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]#,((0,90,220),(10,110,235))]
+	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110)),((0,90,220),(10,110,235))]
 	#image=cv2.resize(image,(832,624))
 	#image filtering
 	image=cv2.bilateralFilter(image,9,75,75)
@@ -74,16 +74,16 @@ def check_position(center,image):
 
 if __name__=='__main__':
 	try:
-		video=cv2.VideoCapture(0)
+		video=cv2.VideoCapture("testvid2.mp4")
 		if video.isOpened()==False:
 			video.open()
 		
-		port=arduinoSerial()
+		#port=arduinoSerial()
 		#image=diffFilter(image0,image1,image2)
 		print("hi34342")
 		images=list()
 		i=0
-		port.write_Serial("0")
+		#port.write_Serial("0")
 		time.sleep(2)
 		_,image=video.read()
 		
@@ -123,10 +123,10 @@ if __name__=='__main__':
 			else:
 				foundCount=0
 			
-			if port.port!=None and dir!="" and newFrameCount>=7 and dir!="0":
-				print(dir)
-				port.write_Serial(dir)
-				newFrameCount=0
+			#if #port.#port!=None and dir!="" and newFrameCount>=7 and dir!="0":
+			#	print(dir)
+				#port.write_Serial(dir)
+			#	newFrameCount=0
 			cv2.drawContours(filtered_img,cnts,-1,(0,255,255),10)
 			cv2.imshow("title",filtered_img)
 			cv2.imshow("image",image)
@@ -141,7 +141,7 @@ if __name__=='__main__':
 		
 		cv2.destroyAllWindows()
 		video.release()
-		port.write_Serial("0")
+		#port.write_Serial("0")
 	except:
 		print("can't open")
 		raise

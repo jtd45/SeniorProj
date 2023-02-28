@@ -25,7 +25,8 @@ def findObjects(contours):
 	return objects
 
 def image_filter(image):
-	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]#,((0,90,220),(10,110,235))]
+	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110)),((0,90,220),(10,110,235))]
+	
 	image=cv2.resize(image,(832,624))
 	#image filtering
 	image=cv2.bilateralFilter(image,9,75,75)
@@ -41,7 +42,7 @@ def image_filter(image):
 
 def get_roi_hist(image,rect):
 	roi=image[rect.x1-20:rect.get_width()+40,rect.y1-20:rect.get_width()+40]
-	boundries=[((0,240,220),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110))]
+	boundries=[((0,210,200),(5,255,235)),((175,110,250),(180,140,255)),((170,190,120),(180,235,170)),((0,240,110),(0,245,120)),((170,200,240),(175,240,255)),((0,210,170),(5,220,180)),((175,200,90),(180,225,110)),((0,90,220),(10,110,235))]
 	image=cv2.resize(image,(832,624))
 	hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
 	mask=0
@@ -88,17 +89,17 @@ def check_frisbee(frisbee):
 		frisbee.frisbee=2
 
 def find_loc(x,y,image):
-	dir="0"
+	directions="0"
 	if x>0 and y>0:
 		if y>332:
-			dir="9"#move right
+			directions="9"#move down
 		elif y<292:
-			dir="1"#move left
+			directions="1"#move up
 		if x>446:
-			dir="9"+dir#move right
+			directions="9"+directions#move right
 		elif x<386:
-			dir="1"+dir#move left
-	return dir
+			directions="1"+directions#move left
+	return directions
 
 def diffFilter(f0,f1,f2):
 	d1=cv2.bitwise_or(f2,f1)
@@ -107,14 +108,14 @@ def diffFilter(f0,f1,f2):
 
 if __name__=='__main__':
 	try:
-		video=cv2.VideoCapture(0)
+		video=cv2.VideoCapture("testvid2.mp4")
 		if video.isOpened()==False:
 			video.open()
 		count=0
 		counter=0
 
 		redobjects=list()
-		port=arduinoSerial()
+		#port=arduinoSerial()
 		
 		fourcc = cv2.VideoWriter_fourcc(*'XVID')
 		out = cv2.VideoWriter('output.avi',fourcc, 20.0, (832,624))
@@ -124,8 +125,8 @@ if __name__=='__main__':
 		cv2.imshow("title",image)
 		
 		frisbee=RedObj(Rect(-1,-1,-1,-1),-1)
-		prevdir=""
-		dirCount=0
+		prevdirections=""
+		directionCount=0
 		
 		pantilt=[90,90]
 		state=0
@@ -147,6 +148,8 @@ if __name__=='__main__':
 					cv2.rectangle(image,(rect.x1,rect.y1),(rect.x2,rect.y2),(0,255,0),2)
 			
 			find_overlap(redobjects,rects)
+
+			#if frisbee hasn't been found or was lost find frisbee
 			if frisbee.found==False or frisbee.frisbee==-1:
 				state=0
 				track_window=Rect(-1,-1,-1,-1)
@@ -158,6 +161,7 @@ if __name__=='__main__':
 				if frisbee.frisbee!=-1:
 					frisbee.frisbee=1
 				disp_objects(image,frisbee)
+			#if the frisbee has been found track it
 			else:
 				if state==0:
 					roi_hist,term_crit=get_roi_hist(imageo,frisbee.rect)
@@ -175,9 +179,9 @@ if __name__=='__main__':
 				disp_objects(image,frisbee)
 				check_frisbee(frisbee)
 
-			dir=""
+			directions=""
 			
-			if counter>0 and dir!=prevdir:
+			if counter>0 and directions!=prevdirections:
 				counter+=1
 				if counter>=3:
 					counter=0
@@ -185,25 +189,26 @@ if __name__=='__main__':
 				counter=0
 			if(frisbee.found==True):
 				x,y=track_window.get_center()
-				dir=find_loc(x,y,image)
-				prevdir=dir
-				dirCount=0
+				directions=find_loc(x,y,image)
+				prevdirections=directions
+				directionCount=0
 			else:
-				if dirCount<0:
+				if directionCount<0:
 					counter=0
-					dir=prevdir
-					dirCount+=1
+					directions=prevdirections
+					directionCount+=1
 			
-			serialString=port.read_Serial()
+			serialString=None #port.read_Serial()
 			if serialString!=None:
 				i=serialString.find("tilt")
 				if i>0:
 					print("tilt",serialString[i:16])
-			
-			if port.port!=None and counter==0 and frisbee.found==True:
-				port.write_Serial(dir)
-				counter+=1
-			cv2.putText(image,dir,(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
+
+			#tell the arduino which direction to move the camera
+			#if #port.#port!=None and counter==0 and frisbee.found==True:
+				#port.write_Serial(directions)
+			#	counter+=1
+			cv2.putText(image,directions,(0,50),cv2.FONT_HERSHEY_COMPLEX,1,(0,255,255))
 
 			k=cv2.waitKey(10)&0xFF
 			if k==27:
@@ -213,8 +218,8 @@ if __name__=='__main__':
 			cv2.imshow("title",image)
 			out.write(image)
 			
-		if port.port!=None:
-				port.write_Serial("0")
+		#if #port.#port!=None:
+				#port.write_Serial("0")
 		cv2.destroyAllWindows()
 		video.release()
 		out.release()
